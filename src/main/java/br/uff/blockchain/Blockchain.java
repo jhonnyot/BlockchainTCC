@@ -1,7 +1,7 @@
 package br.uff.blockchain;
 
 import java.security.Security;
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
@@ -16,35 +16,41 @@ import br.uff.blockchain.model.BlockchainThread;
 import br.uff.blockchain.model.Bloco;
 import br.uff.blockchain.model.Carteira;
 import br.uff.blockchain.model.Corrente;
+import br.uff.blockchain.model.TransSaida;
 import br.uff.blockchain.model.Transaction;
-import br.uff.blockchain.utility.StringUtil;
 
 public class Blockchain {
 
-	public static final int DIFICULDADE = 5;
-	public static Carteira c1;
-	public static Carteira c2;
-	public static final int NUMERO_THREADS = 15;
+	public static final int DIFICULDADE = 3;
+	public static final int NUMERO_THREADS = 2;
+	public static final int MINIMO_TRANSACAO = 5;
 	public static final ExecutorService exSvc = Executors.newFixedThreadPool(NUMERO_THREADS);
 	public static final CyclicBarrier CB = new CyclicBarrier(NUMERO_THREADS + 1);
+
+	public static HashMap<String, TransSaida> UTXOs = new HashMap<>();
+	public static Transaction genesis;
+	public static Carteira c1;
+	public static Carteira c2;
+	public static Carteira coinbase;
 
 	public static void main(String[] args) {
 		Security.addProvider(new BouncyCastleProvider());
 		c1 = new Carteira();
 		c2 = new Carteira();
-		System.out.println("Teste de Chaves:");
-		System.out.println(StringUtil.getStringFromKey(c1.getSk()));
-		System.out.println(StringUtil.getStringFromKey(c1.getPk()));
-		Transaction t = new Transaction(c1.getPk(), c2.getPk(), 5, null);
-		t.geraAssinatura(c1.getSk());
-		System.out.println("Assinatura verificada: " + t.verificaAssinatura());
-		var trans = new ArrayList<Transaction>();
-		trans.add(t);
+		coinbase = new Carteira();
+		genesis = new Transaction(coinbase.getPk(), c1.getPk(), 100f, null);
+		genesis.geraAssinatura(coinbase.getSk());
+		genesis.setId("0");
+		genesis.getSaidas().add(new TransSaida(genesis.getDestinatario(), genesis.getValor(), genesis.getId()));
+		UTXOs.put(genesis.getSaidas().get(0).getId(), genesis.getSaidas().get(0));
+		var genBlock = new Bloco("0");
+		genBlock.addTransacao(genesis);
 		Corrente.getInstance().setDificuldade(DIFICULDADE);
-		Corrente.getInstance().getBlockchain().add(new Bloco(trans, "0"));
+		Corrente.getInstance().setFlagTeste();
+		Corrente.getInstance().getBlockchain().add(genBlock);
 		long inicio = System.nanoTime();
 		for (var i = 1; i <= NUMERO_THREADS; i++) {
-			var bt = new BlockchainThread("Thread " + i, DIFICULDADE, trans, i, CB);
+			var bt = new BlockchainThread("Thread " + i, DIFICULDADE, 10, CB);
 			exSvc.execute(bt);
 		}
 		try {

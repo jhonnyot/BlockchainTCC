@@ -1,6 +1,5 @@
 package br.uff.blockchain.model;
 
-import java.util.ArrayList;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
 
@@ -9,16 +8,13 @@ public class BlockchainThread implements Runnable {
 	private Thread t;						// Thread
 	private String nome;					// Nome
 	private int dificuldade;				// dificuldade do bloco a ser minerado
-	private ArrayList<Transaction> dados;	// dados a serem adicionados ao bloco
 	private int alvo;						// número de blocos a serem minerados pela thread
 	private CyclicBarrier cb;				// barreira que garante que a execução será finalizada após a finalização
 												// da(s) thread(s)
 
-	public BlockchainThread(String nome, int dificuldade, ArrayList<Transaction> transacoes, int alvo,
-			CyclicBarrier cb) {
+	public BlockchainThread(String nome, int dificuldade, int alvo, CyclicBarrier cb) {
 		this.nome = nome;
 		this.dificuldade = dificuldade;
-		this.dados = transacoes;
 		this.alvo = alvo;
 		this.cb = cb;
 	}
@@ -31,7 +27,7 @@ public class BlockchainThread implements Runnable {
 			while (Corrente.getInstance().getBlockchain().size() < alvo) {
 				System.out.println(this.nome + ": Minerando bloco: " + Corrente.getInstance().getBlockchain().size());
 				if (Corrente.getInstance().correnteValida()) {
-					if (!Corrente.getInstance().mineraBloco(this.dificuldade, this.dados)) {
+					if (!Corrente.getInstance().mineraBloco(this.dificuldade)) {
 						continue;
 					}
 				} else continue;
@@ -40,6 +36,7 @@ public class BlockchainThread implements Runnable {
 			this.cb.await();
 		} catch (Exception e) {
 			System.out.println(this.nome + " interrompida.");
+			e.printStackTrace();
 			try {
 				this.cb.await();
 			} catch (InterruptedException | BrokenBarrierException e1) {

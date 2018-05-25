@@ -2,8 +2,13 @@ package br.uff.blockchain.model;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
+import br.uff.blockchain.Blockchain;
+import br.uff.blockchain.utility.StringUtil;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
@@ -11,6 +16,7 @@ import javafx.collections.ObservableList;
 public class Corrente {
 
 	private static Corrente instance;
+	private static boolean GERA_TRANS;
 
 	private List<Bloco> blockchain;
 	private int dificuldade;
@@ -18,6 +24,7 @@ public class Corrente {
 
 	private Corrente() {
 		super();
+		GERA_TRANS = false;
 		List<Bloco> lista = Collections.synchronizedList(new ArrayList<>());
 		ObservableList<Bloco> obsList = FXCollections.observableArrayList(lista);
 		obsList.addListener(new ListChangeListener<Bloco>() {
@@ -61,8 +68,28 @@ public class Corrente {
 		return true;
 	}
 
-	public boolean mineraBloco(int dificuldade, ArrayList<Transaction> dados) {
-		var b = new Bloco(dados, this.blockchain.get(this.blockchain.size() - 1).getHash());
+	public boolean mineraBloco(int dificuldade) {
+		var b = new Bloco(this.blockchain.get(this.blockchain.size() - 1).getHash());
+		if (GERA_TRANS) {
+			Carteira remetente, destinatario;
+			Random r = new Random();
+			if (!(this.blockchain.size() > 1)) {
+				remetente = Blockchain.c1;
+				destinatario = Blockchain.c2;
+			} else {
+				boolean bool = r.nextBoolean();
+				remetente = bool ? Blockchain.c1 : Blockchain.c2;
+				destinatario = bool ? Blockchain.c2 : Blockchain.c1;
+			}
+			Transaction t = new Transaction(remetente.getPk(), destinatario.getPk(),
+					(float) ThreadLocalRandom.current().nextDouble(0f, remetente.getSaldo()), new ArrayList<>());
+			t.geraAssinatura(remetente.getSk());
+			t.setId(StringUtil.aplicaSha256(t.toString()));
+			t.getSaidas().add(new TransSaida(t.getDestinatario(), t.getValor(), t.getId()));
+			t.getEntradas().add(new TransEntrada(t.getSaidas().get(0).getId()));
+			b.addTransacao(t);
+		}
+		b.setRaizMerkle(StringUtil.getRaizMerkle(b.getDados()));
 		b.validaHash(dificuldade);
 		System.out.println(Thread.currentThread().getName() + ": Novo bloco encontrado: " + b.getHash());
 		System.out.println("Nonces testados: " + (b.getAcc() * Bloco.TOTAL_NONCES));
@@ -73,6 +100,9 @@ public class Corrente {
 	public synchronized boolean correnteValida() {
 		Bloco atual;
 		Bloco anterior;
+		var hashAlvo = new String(new char[this.dificuldade]).replace("\0", "0");
+		var tempUTXOs = new HashMap<String, TransSaida>();
+		tempUTXOs.put(Blockchain.genesis.getSaidas().get(0).getId(), Blockchain.genesis.getSaidas().get(0));
 
 		if (this.isModificada()) {
 			this.setModificada(false);
@@ -97,6 +127,44 @@ public class Corrente {
 					Corrente.getInstance().getBlockchain().remove(atual);
 					return false;
 				}
+				if (!atual.getHash().substring(0, this.dificuldade).equals(hashAlvo)) {
+					System.out.println("Este bloco não foi minerado.");
+					return false;
+				}
+
+				TransSaida tempSaida;
+				for (var t = 0; t < atual.getDados().size(); t++) {
+					Transaction transAtual = atual.getDados().get(t);
+					if (!transAtual.verificaAssinatura()) {
+						System.out.println("Assinatura da transação " + t + " é inválida.");
+						return false;
+					} else if (transAtual.getValoresEntradas() != transAtual.getValoresSaidas()) {
+						System.out.println("Entradas não coincidem com saídas na transação " + t);
+						return false;
+					}
+					for (TransEntrada e : transAtual.getEntradas()) {
+						tempSaida = tempUTXOs.get(e.getTransSaidaId());
+						if (tempSaida == null) {
+							System.out.println("Transação referenciada na transação " + t + " não existe.");
+							return false;
+						} else if (e.getUTXO().getValor() != tempSaida.getValor()) {
+							System.out.println("Valor inválido para transação referenciada em " + t);
+							return false;
+						}
+						tempUTXOs.remove(e.getTransSaidaId());
+					}
+					for (TransSaida s : transAtual.getSaidas()) {
+						tempUTXOs.put(s.getId(), s);
+					}
+					if (transAtual.getSaidas().get(0).getDestinatario() != transAtual.getDestinatario()) {
+						System.out.println("Destinatário da transação " + t + " não é válido.");
+						return false;
+					} else if (transAtual.getSaidas().get(1).getDestinatario() != transAtual.getRemetente()) {
+						System.out.println("Troco da transação " + t + " não vai para o remetente.");
+						return false;
+					}
+
+				}
 			}
 		}
 		return true;
@@ -112,6 +180,10 @@ public class Corrente {
 
 	private void setModificada(boolean modificada) {
 		this.modificada = modificada;
+	}
+
+	public void setFlagTeste() {
+		GERA_TRANS = true;
 	}
 
 }

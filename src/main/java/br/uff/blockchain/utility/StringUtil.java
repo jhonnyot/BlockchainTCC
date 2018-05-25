@@ -5,7 +5,10 @@ import java.security.MessageDigest;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.Signature;
+import java.util.ArrayList;
 import java.util.Base64;
+
+import br.uff.blockchain.model.Transaction;
 
 public class StringUtil {
 
@@ -58,4 +61,23 @@ public class StringUtil {
 	public static String getStringFromKey(Key chave) {
 		return Base64.getEncoder().encodeToString(chave.getEncoded());
 	}
+
+	public static String getRaizMerkle(ArrayList<Transaction> trans) {
+		var count = trans.size();
+		var camadaAnterior = new ArrayList<String>();
+		for (Transaction t : trans) {
+			camadaAnterior.add(t.getId());
+		}
+		var camada = camadaAnterior;
+		while (count > 1) {
+			camada = new ArrayList<String>();
+			for (var i = 1; i < camadaAnterior.size(); i++) {
+				camada.add(aplicaSha256(camadaAnterior.get(i - 1) + camadaAnterior.get(i)));
+			}
+			count = camada.size();
+			camadaAnterior = camada;
+		}
+		return (camada.size() == 1) ? camada.get(0) : "";
+	}
+
 }

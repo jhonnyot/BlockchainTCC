@@ -17,22 +17,38 @@ public class Bloco {
 	private List<Integer> nonces;											// Lista de nonces testados no bloco
 	private int acc;														// Acumulador para manter o controle de
 																			// nonces gerados
+	private String raizMerkle;
 	public static final int TOTAL_NONCES = (int) Math.pow(2, 16);			// Número máximo de nonces gerados
 
 	// Construtor
-	public Bloco(ArrayList<Transaction> dados, String hashAnterior) {
-		this.setDados(dados);
+	public Bloco(String hashAnterior) {
 		this.hashAnterior = hashAnterior;
 		this.setTimeStamp(new Date().getTime());
+		this.dados = new ArrayList<>();
 		this.nonce = 0;
 		this.nonces = new ArrayList<>();
+		this.raizMerkle = "";
 		this.hash = this.calculaHash();
 		this.setAcc(0);
 	}
 
+	public boolean addTransacao(Transaction trans) {
+		if (trans == null)
+			return false;
+		if (this.hashAnterior != "0") {
+			if (!trans.processaTransacao()) {
+				System.out.println("Falha ao processar transação.");
+				return false;
+			}
+		}
+		this.dados.add(trans);
+		System.out.println("Transação " + trans.getId() + " adicionada ao bloco.");
+		return true;
+	}
+
 	public String calculaHash() {
-		String hashCalculado = StringUtil.aplicaSha256(
-				this.hashAnterior + Long.toString(timeStamp) + this.dados.toString() + Integer.toString(nonce));
+		String hashCalculado = StringUtil.aplicaSha256(this.hashAnterior + Long.toString(timeStamp)
+				+ this.dados.toString() + Integer.toString(nonce) + this.raizMerkle);
 		return hashCalculado;
 	}
 
@@ -85,6 +101,10 @@ public class Bloco {
 
 	public synchronized String getHashAnterior() {
 		return this.hashAnterior;
+	}
+
+	public void setRaizMerkle(String raiz) {
+		this.raizMerkle = raiz;
 	}
 
 	public List<Integer> getNonces() {
